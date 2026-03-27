@@ -92,15 +92,25 @@ async def test_register_invalid_email():
 @pytest.mark.anyio
 async def test_register_success():
     from httpx import AsyncClient, ASGITransport
-    from database import get_db
+    from database import get_db, User, AccountType
+
+    fake_user = MagicMock(spec=User)
+    fake_user.id = "user-new-123"
+    fake_user.account_type = AccountType.regular
+    fake_user.email = "new@test.sk"
 
     mock_db = AsyncMock()
     mock_result = MagicMock()
-    mock_result.scalar_one_or_none.return_value = None
+    mock_result.scalar_one_or_none.return_value = None  # email not taken
     mock_db.execute = AsyncMock(return_value=mock_result)
     mock_db.add = MagicMock()
     mock_db.commit = AsyncMock()
-    mock_db.refresh = AsyncMock()
+
+    async def mock_refresh(obj):
+        obj.id = "user-new-123"
+        obj.account_type = AccountType.regular
+
+    mock_db.refresh = mock_refresh
 
     async def override_db():
         yield mock_db
