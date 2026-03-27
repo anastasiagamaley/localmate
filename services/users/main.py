@@ -44,9 +44,11 @@ def compute_level(gigs: int) -> tuple[int, str]:
 
 def xp_to_next(gigs: int) -> int:
     """How many more gigs until next level."""
-    for min_gigs, _, _ in LEVELS:
-        if gigs < min_gigs:
-            return min_gigs - gigs
+    # Iterate from lowest to highest threshold
+    thresholds = [10, 30, 100, 300]
+    for threshold in thresholds:
+        if gigs < threshold:
+            return threshold - gigs
     return 0  # already Master
 
 

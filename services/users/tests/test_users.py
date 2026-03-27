@@ -63,7 +63,7 @@ def test_xp_to_next_level_bronze():
 
 def test_xp_to_next_level_silver():
     from main import xp_to_next
-    # At 10 gigs, need 20 more for gold
+    # At 10 gigs (silver), need 20 more to reach gold (30)
     assert xp_to_next(10) == 20
 
 
@@ -78,10 +78,11 @@ def test_xp_to_next_level_master_is_zero():
 
 @pytest.mark.anyio
 async def test_health():
-    from unittest.mock import AsyncMock, patch
+    from unittest.mock import AsyncMock, patch, MagicMock
     from httpx import AsyncClient, ASGITransport
 
-    with patch("database.create_tables", new_callable=AsyncMock):
+    with patch("database.create_tables", new_callable=AsyncMock), \
+         patch("database.engine", MagicMock()):
         from main import app
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             r = await c.get("/health")
@@ -99,20 +100,26 @@ async def test_internal_create_profile():
 
     mock_db = AsyncMock()
     mock_result = MagicMock()
-    mock_result.scalar_one_or_none.return_value = None  # no existing profile
+    mock_result.scalar_one_or_none.return_value = None
     mock_db.execute = AsyncMock(return_value=mock_result)
     mock_db.add = MagicMock()
     mock_db.commit = AsyncMock()
 
+    async def override_get_db():
+        yield mock_db
+
     with patch("database.create_tables", new_callable=AsyncMock), \
-         patch("main.get_db", return_value=mock_db):
+         patch("database.engine", MagicMock()):
         from main import app
+        from database import get_db
+        app.dependency_overrides[get_db] = override_get_db
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             r = await c.post("/internal/create", json={
                 "user_id": "user-123",
                 "email": "test@test.sk",
                 "account_type": "regular"
             })
+        app.dependency_overrides.clear()
 
     assert r.status_code == 201
     assert r.json()["ok"] is True
@@ -120,33 +127,36 @@ async def test_internal_create_profile():
 
 @pytest.mark.anyio
 async def test_internal_create_profile_idempotent():
-    """Creating same profile twice should not fail."""
     from unittest.mock import AsyncMock, MagicMock, patch
     from httpx import AsyncClient, ASGITransport
     from database import Profile
 
     existing = MagicMock(spec=Profile)
     mock_result = MagicMock()
-    mock_result.scalar_one_or_none.return_value = existing  # already exists
+    mock_result.scalar_one_or_none.return_value = existing
 
     mock_db = AsyncMock()
     mock_db.execute = AsyncMock(return_value=mock_result)
 
+    async def override_get_db():
+        yield mock_db
+
     with patch("database.create_tables", new_callable=AsyncMock), \
-         patch("main.get_db", return_value=mock_db):
+         patch("database.engine", MagicMock()):
         from main import app
+        from database import get_db
+        app.dependency_overrides[get_db] = override_get_db
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             r = await c.post("/internal/create", json={
                 "user_id": "user-123",
                 "email": "test@test.sk",
                 "account_type": "regular"
             })
+        app.dependency_overrides.clear()
 
     assert r.status_code == 201
     assert "already exists" in r.json().get("note", "")
 
-
-# ── XP and level up ───────────────────────────────────────────────────────────
 
 @pytest.mark.anyio
 async def test_gig_complete_awards_xp():
@@ -168,15 +178,20 @@ async def test_gig_complete_awards_xp():
     mock_db.commit = AsyncMock()
     mock_db.refresh = AsyncMock()
 
+    async def override_get_db():
+        yield mock_db
+
     with patch("database.create_tables", new_callable=AsyncMock), \
-         patch("main.get_db", return_value=mock_db):
+         patch("database.engine", MagicMock()):
         from main import app
+        from database import get_db
+        app.dependency_overrides[get_db] = override_get_db
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             r = await c.post("/internal/gig-complete", json={"user_id": "provider-1"})
+        app.dependency_overrides.clear()
 
     assert r.status_code == 200
     data = r.json()
     assert data["gigs_completed"] == 10
-    # 10 gigs = silver level
     assert data["level"] == 2
     assert "Strieborný" in data["level_name"]

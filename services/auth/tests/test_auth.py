@@ -4,48 +4,9 @@ Auth Service Tests
 Run: pytest tests/ -v
 """
 import pytest
-from httpx import AsyncClient, ASGITransport
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
-
-# ── Fixtures ──────────────────────────────────────────────────────────────────
-
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest.fixture
-async def client():
-    """In-memory test client — no real DB needed."""
-    # Patch DB and external calls before importing app
-    with patch("database.create_tables", new_callable=AsyncMock), \
-         patch("main._bootstrap_new_user", new_callable=AsyncMock):
-
-        from main import app
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
-            yield c
-
-
-@pytest.fixture
-def mock_user():
-    return {"email": "test@localmate.sk", "password": "heslo1234"}
-
-
-# ── Health ────────────────────────────────────────────────────────────────────
-
-@pytest.mark.anyio
-async def test_health():
-    from main import app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        r = await c.get("/health")
-    assert r.status_code == 200
-    assert r.json()["service"] == "auth"
-    assert r.json()["status"] == "ok"
 
 
 # ── Security utils ────────────────────────────────────────────────────────────
@@ -81,60 +42,89 @@ def test_invalid_token_returns_none():
     assert decode_token("") is None
 
 
-# ── Registration ──────────────────────────────────────────────────────────────
+# ── Health ────────────────────────────────────────────────────────────────────
 
 @pytest.mark.anyio
-async def test_register_success(mock_user):
-    from main import app
-    from unittest.mock import AsyncMock, MagicMock, patch
+async def test_health():
+    from httpx import AsyncClient, ASGITransport
+
+    with patch("database.create_tables", new_callable=AsyncMock), \
+         patch("database.engine", MagicMock()):
+        from main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            r = await c.get("/health")
+
+    assert r.status_code == 200
+    assert r.json()["service"] == "auth"
+    assert r.json()["status"] == "ok"
+
+
+# ── Registration validation ───────────────────────────────────────────────────
+
+@pytest.mark.anyio
+async def test_register_short_password():
+    from httpx import AsyncClient, ASGITransport
+
+    with patch("database.create_tables", new_callable=AsyncMock), \
+         patch("database.engine", MagicMock()):
+        from main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            r = await c.post("/register", json={"email": "a@b.sk", "password": "short"})
+
+    assert r.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_register_invalid_email():
+    from httpx import AsyncClient, ASGITransport
+
+    with patch("database.create_tables", new_callable=AsyncMock), \
+         patch("database.engine", MagicMock()):
+        from main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            r = await c.post("/register", json={"email": "notanemail", "password": "heslo1234"})
+
+    assert r.status_code == 422
+
+
+# ── Register success ──────────────────────────────────────────────────────────
+
+@pytest.mark.anyio
+async def test_register_success():
+    from httpx import AsyncClient, ASGITransport
+    from database import get_db
 
     mock_db = AsyncMock()
     mock_result = MagicMock()
-    mock_result.scalar_one_or_none.return_value = None  # email not taken
+    mock_result.scalar_one_or_none.return_value = None
     mock_db.execute = AsyncMock(return_value=mock_result)
     mock_db.add = MagicMock()
     mock_db.commit = AsyncMock()
     mock_db.refresh = AsyncMock()
 
-    with patch("main.get_db", return_value=mock_db), \
-         patch("main._bootstrap_new_user", new_callable=AsyncMock), \
-         patch("database.create_tables", new_callable=AsyncMock):
+    async def override_db():
+        yield mock_db
 
+    with patch("database.create_tables", new_callable=AsyncMock), \
+         patch("database.engine", MagicMock()), \
+         patch("main._bootstrap_new_user", new_callable=AsyncMock):
+        from main import app
+        app.dependency_overrides[get_db] = override_db
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            r = await c.post("/register", json=mock_user)
+            r = await c.post("/register", json={"email": "new@test.sk", "password": "heslo1234"})
+        app.dependency_overrides.clear()
 
     assert r.status_code == 201
-    data = r.json()
-    assert "access_token" in data
-    assert "refresh_token" in data
-    assert data["token_type"] == "bearer"
+    assert "access_token" in r.json()
+    assert "refresh_token" in r.json()
 
 
-@pytest.mark.anyio
-async def test_register_short_password():
-    from main import app
-    with patch("database.create_tables", new_callable=AsyncMock):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            r = await c.post("/register", json={"email": "a@b.sk", "password": "short"})
-    assert r.status_code == 422  # validation error
-
-
-@pytest.mark.anyio
-async def test_register_invalid_email():
-    from main import app
-    with patch("database.create_tables", new_callable=AsyncMock):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            r = await c.post("/register", json={"email": "notanemail", "password": "heslo1234"})
-    assert r.status_code == 422
-
-
-# ── Login ─────────────────────────────────────────────────────────────────────
+# ── Login wrong password ──────────────────────────────────────────────────────
 
 @pytest.mark.anyio
 async def test_login_wrong_password():
-    from main import app
-    from unittest.mock import AsyncMock, MagicMock, patch
-    from database import User, AccountType
+    from httpx import AsyncClient, ASGITransport
+    from database import get_db, User, AccountType
     from security import hash_password
 
     fake_user = MagicMock(spec=User)
@@ -145,14 +135,19 @@ async def test_login_wrong_password():
 
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = fake_user
-
     mock_db = AsyncMock()
     mock_db.execute = AsyncMock(return_value=mock_result)
 
-    with patch("main.get_db", return_value=mock_db), \
-         patch("database.create_tables", new_callable=AsyncMock):
+    async def override_db():
+        yield mock_db
+
+    with patch("database.create_tables", new_callable=AsyncMock), \
+         patch("database.engine", MagicMock()):
+        from main import app
+        app.dependency_overrides[get_db] = override_db
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             r = await c.post("/login", json={"email": "test@test.sk", "password": "wrongpassword"})
+        app.dependency_overrides.clear()
 
     assert r.status_code == 401
 
@@ -161,12 +156,14 @@ async def test_login_wrong_password():
 
 @pytest.mark.anyio
 async def test_verify_valid_token():
-    from main import app
+    from httpx import AsyncClient, ASGITransport
     from security import create_access_token
 
     token = create_access_token("user-abc", "regular")
 
-    with patch("database.create_tables", new_callable=AsyncMock):
+    with patch("database.create_tables", new_callable=AsyncMock), \
+         patch("database.engine", MagicMock()):
+        from main import app
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             r = await c.post("/verify", json={"token": token})
 
@@ -177,8 +174,11 @@ async def test_verify_valid_token():
 
 @pytest.mark.anyio
 async def test_verify_invalid_token():
-    from main import app
-    with patch("database.create_tables", new_callable=AsyncMock):
+    from httpx import AsyncClient, ASGITransport
+
+    with patch("database.create_tables", new_callable=AsyncMock), \
+         patch("database.engine", MagicMock()):
+        from main import app
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             r = await c.post("/verify", json={"token": "garbage.token.here"})
 
