@@ -1,0 +1,16 @@
+# Don't copy these into any service container
+.git
+.github
+.env
+*.md
+Makefile
+infra/
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+dist/
+build/
+services/frontend/node_modules
+services/frontend/dist

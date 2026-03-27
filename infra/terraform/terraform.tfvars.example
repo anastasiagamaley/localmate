@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars and fill in real values
+# NEVER commit terraform.tfvars to git!
+
+aws_region       = "eu-central-1"
+environment      = "prod"
+docker_registry  = "yourdockerhubusername"
+docker_image_tag = "latest"
+
+# Secrets — set via env vars instead:
+# export TF_VAR_db_password="..."
+# export TF_VAR_secret_key="..."
+# export TF_VAR_gemini_api_key="..."

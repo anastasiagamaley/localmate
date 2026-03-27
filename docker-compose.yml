@@ -1,0 +1,203 @@
+version: "3.9"
+
+x-common-env: &common-env
+  POSTGRES_USER: ${POSTGRES_USER:-localmate}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_in_prod}
+  POSTGRES_DB: ${POSTGRES_DB:-localmate}
+  DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://localmate:changeme_in_prod@postgres:5432/localmate}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  SECRET_KEY: ${SECRET_KEY:-change_this_to_a_long_random_string_min_32_chars}
+  ALGORITHM: HS256
+  ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+  REFRESH_TOKEN_EXPIRE_DAYS: "30"
+  WELCOME_TOKENS: "50"
+  CONTACT_OPEN_COST: "5"
+  XP_PER_GIG: "10"
+  ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:8000"
+  ENVIRONMENT: development
+  LOG_LEVEL: INFO
+  AI_PROVIDER: ${AI_PROVIDER:-gemini}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  VENDOR_API_KEY: ${VENDOR_API_KEY:-change_this_vendor_secret_key}
+  AUTH_SERVICE_URL: http://auth:8001
+  USERS_SERVICE_URL: http://users:8002
+  SEARCH_SERVICE_URL: http://search:8003
+  TOKENS_SERVICE_URL: http://tokens:8004
+  VENDORS_SERVICE_URL: http://vendors:8005
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-localmate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_in_prod}
+      POSTGRES_DB: ${POSTGRES_DB:-localmate}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U localmate"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  auth:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      <<: *common-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  users:
+    build:
+      context: .
+      dockerfile: services/users/Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      <<: *common-env
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  search:
+    build:
+      context: .
+      dockerfile: services/search/Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      <<: *common-env
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  tokens:
+    build:
+      context: .
+      dockerfile: services/tokens/Dockerfile
+    ports:
+      - "8004:8004"
+    environment:
+      <<: *common-env
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  vendors:
+    build:
+      context: .
+      dockerfile: services/vendors/Dockerfile
+    ports:
+      - "8005:8005"
+    environment:
+      <<: *common-env
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8005/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      <<: *common-env
+    depends_on:
+      auth:    { condition: service_healthy }
+      users:   { condition: service_healthy }
+      search:  { condition: service_healthy }
+      tokens:  { condition: service_healthy }
+      vendors: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: services/worker/Dockerfile
+    environment:
+      <<: *common-env
+    depends_on:
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: services/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://localhost:8000
+      VITE_APP_NAME: LocalMate
+    depends_on:
+      - gateway
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: localmate_network
