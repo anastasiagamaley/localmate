@@ -68,4 +68,14 @@ export const tokensApi = {
   getHistory:   ()     => api.get('/tokens/history'),
 }
 
+// ─── Gigs ─────────────────────────────────────────────────────────────────────
+export const gigsApi = {
+  priceCheck:  (data)    => api.post('/gigs/price-check', data),
+  create:      (data)    => api.post('/gigs/', data),
+  myGigs:      (status)  => api.get('/gigs/my', { params: status ? { status } : {} }),
+  getGig:      (id)      => api.get(`/gigs/${id}`),
+  accept:      (id)      => api.post(`/gigs/${id}/accept`),
+  complete:    (id)      => api.post(`/gigs/${id}/complete`),
+  cancel:      (id, reason) => api.post(`/gigs/${id}/cancel`, { reason }),
+}
 export default api

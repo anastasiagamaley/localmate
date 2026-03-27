@@ -8,6 +8,7 @@ class GatewayConfig(BaseSettings):
     search_service_url: str = "http://search:8003"
     tokens_service_url: str = "http://tokens:8004"
     vendors_service_url: str = "http://vendors:8005"
+    gigs_service_url: str = "http://gigs:8006"
 
     allowed_origins: str = "http://localhost:3000"
     environment: str = "development"

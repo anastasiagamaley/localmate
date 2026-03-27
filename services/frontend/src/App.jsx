@@ -7,6 +7,7 @@ import { Login, Register } from './pages/Auth'
 import SearchPage from './pages/Search'
 import ProfilePage from './pages/Profile'
 import TokensPage from './pages/Tokens'
+import GigsPage from './pages/Gigs'
 
 function RequireAuth({ children }) {
   const { isAuthenticated } = useStore()
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/search"   element={<RequireAuth><SearchPage /></RequireAuth>} />
         <Route path="/profile"  element={<RequireAuth><ProfilePage /></RequireAuth>} />
         <Route path="/tokens"   element={<RequireAuth><TokensPage /></RequireAuth>} />
+        <Route path="/gigs"     element={<RequireAuth><GigsPage /></RequireAuth>} />
         <Route path="*"         element={<Navigate to="/" replace />} />
       </Routes>
 

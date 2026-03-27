@@ -4,7 +4,8 @@ import toast from 'react-hot-toast'
 import { searchApi, tokensApi } from '../lib/api'
 import { useStore } from '../store/useStore'
 import { Page, SectionLabel, LevelBadge, Spinner } from '../components/ui'
-import { Search, MapPin, Coins } from 'lucide-react'
+import CreateGigModal from '../components/CreateGigModal'
+import { Search, MapPin } from 'lucide-react'
 
 export default function SearchPage() {
   const { balance, setBalance } = useStore()
@@ -15,6 +16,7 @@ export default function SearchPage() {
   const [interpreted, setInterpreted] = useState(null)
   const [loading, setLoading] = useState(false)
   const [openedContacts, setOpenedContacts] = useState(new Set())
+  const [gigModal, setGigModal] = useState(null)  // provider object
 
   const useMyLocation = () => {
     if (!navigator.geolocation) { toast.error('Geolokácia nie je dostupná'); return }
@@ -66,6 +68,15 @@ export default function SearchPage() {
 
   return (
     <Page>
+      {gigModal && (
+        <CreateGigModal
+          provider={gigModal}
+          clientLat={lat ? parseFloat(lat) : null}
+          clientLon={lon ? parseFloat(lon) : null}
+          onClose={() => setGigModal(null)}
+          onCreated={() => { setGigModal(null); toast.success('Gig vytvorený! Pozri sekciu Gigy.') }}
+        />
+      )}
       <SectionLabel>AI vyhľadávanie</SectionLabel>
       <h1 className="font-display font-black text-4xl tracking-tight mb-8">
         Čo hľadáš?
@@ -181,6 +192,7 @@ export default function SearchPage() {
                       rank={i + 1}
                       opened={openedContacts.has(r.user_id)}
                       onOpen={() => handleOpenContact(r.user_id)}
+                      onCreateGig={() => setGigModal(r)}
                     />
                   ))}
                 </div>
@@ -193,7 +205,7 @@ export default function SearchPage() {
   )
 }
 
-function ResultCard({ result: r, rank, opened, onOpen }) {
+function ResultCard({ result: r, rank, opened, onOpen, onCreateGig }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -234,16 +246,25 @@ function ResultCard({ result: r, rank, opened, onOpen }) {
         {r.distance_km} km
       </div>
 
-      {/* Contact button */}
-      <div className="flex-shrink-0">
+      {/* Contact + Gig buttons */}
+      <div className="flex-shrink-0 flex flex-col gap-2 items-end">
         {opened ? (
-          <motion.div
-            initial={{ scale: 0.8 }} animate={{ scale: 1 }}
-            className="text-sm font-bold text-accent2 bg-accent2/10 border border-accent2/30
-                       rounded-xl px-4 py-2.5"
-          >
-            ✅ Kontakt otvorený
-          </motion.div>
+          <>
+            <motion.div
+              initial={{ scale: 0.8 }} animate={{ scale: 1 }}
+              className="text-sm font-bold text-accent2 bg-accent2/10 border border-accent2/30
+                         rounded-xl px-4 py-2"
+            >
+              ✅ Kontakt otvorený
+            </motion.div>
+            <motion.button
+              whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+              onClick={onCreateGig}
+              className="btn-primary text-sm px-4 py-2"
+            >
+              📋 Vytvoriť gig
+            </motion.button>
+          </>
         ) : (
           <motion.button
             whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}

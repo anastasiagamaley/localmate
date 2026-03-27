@@ -24,6 +24,7 @@ x-common-env: &common-env
   SEARCH_SERVICE_URL: http://search:8003
   TOKENS_SERVICE_URL: http://tokens:8004
   VENDORS_SERVICE_URL: http://vendors:8005
+  GIGS_SERVICE_URL: http://gigs:8006
 
 services:
 
@@ -165,6 +166,26 @@ services:
       vendors: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  gigs:
+    build:
+      context: .
+      dockerfile: services/gigs/Dockerfile
+    ports:
+      - "8006:8006"
+    environment:
+      <<: *common-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      tokens:   { condition: service_healthy }
+      users:    { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8006/health')"]
       interval: 15s
       timeout: 10s
       retries: 5

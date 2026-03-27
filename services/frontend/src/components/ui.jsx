@@ -55,6 +55,14 @@ export function Navbar() {
 
               <motion.button
                 whileHover={{ scale: 1.05 }}
+                onClick={() => navigate('/gigs')}
+                className="btn-ghost flex items-center gap-2 text-sm py-2 px-4"
+              >
+                📋 Gigy
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.05 }}
                 onClick={() => navigate('/profile')}
                 className="btn-ghost flex items-center gap-2 text-sm py-2 px-4"
               >

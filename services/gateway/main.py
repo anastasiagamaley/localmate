@@ -53,6 +53,7 @@ ROUTES = {
     "/search":  cfg.search_service_url,
     "/tokens":  cfg.tokens_service_url,
     "/vendors": cfg.vendors_service_url,
+    "/gigs":    cfg.gigs_service_url,
 }
 
 
