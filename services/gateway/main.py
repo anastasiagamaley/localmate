@@ -48,12 +48,13 @@ app.add_middleware(
 
 # ─── Route map: prefix → upstream service URL ────────────────────────────────
 ROUTES = {
-    "/auth":    cfg.auth_service_url,
-    "/users":   cfg.users_service_url,
-    "/search":  cfg.search_service_url,
-    "/tokens":  cfg.tokens_service_url,
-    "/vendors": cfg.vendors_service_url,
-    "/gigs":    cfg.gigs_service_url,
+    "/auth":          cfg.auth_service_url,
+    "/users":         cfg.users_service_url,
+    "/search":        cfg.search_service_url,
+    "/tokens":        cfg.tokens_service_url,
+    "/vendors":       cfg.vendors_service_url,
+    "/gigs":          cfg.gigs_service_url,
+    "/notifications": cfg.notifications_service_url,
 }
 
 

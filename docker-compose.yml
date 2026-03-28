@@ -25,6 +25,7 @@ x-common-env: &common-env
   TOKENS_SERVICE_URL: http://tokens:8004
   VENDORS_SERVICE_URL: http://vendors:8005
   GIGS_SERVICE_URL: http://gigs:8006
+  NOTIFICATIONS_SERVICE_URL: http://notifications:8007
 
 services:
 
@@ -166,6 +167,26 @@ services:
       vendors: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  notifications:
+    build:
+      context: .
+      dockerfile: services/notifications/Dockerfile
+    ports:
+      - "8007:8007"
+    environment:
+      <<: *common-env
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      FROM_EMAIL: ${FROM_EMAIL:-noreply@localmate.sk}
+      FROM_NAME: LocalMate
+      APP_URL: ${APP_URL:-http://localhost:3000}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8007/health')"]
       interval: 15s
       timeout: 10s
       retries: 5

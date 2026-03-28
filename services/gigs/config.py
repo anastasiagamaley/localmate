@@ -10,6 +10,7 @@ class GigsConfig(BaseSettings):
     # Internal services
     tokens_service_url: str = "http://tokens:8004"
     users_service_url: str = "http://users:8002"
+    notifications_service_url: str = "http://notifications:8007"
     worker_redis_url: str = "redis://redis:6379/0"
 
     # AI pricing

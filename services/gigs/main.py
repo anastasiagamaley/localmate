@@ -169,6 +169,11 @@ async def create_gig(
         f"Gig created: {gig.id} | {gig.title} | "
         f"{gig.price_tokens} LM | status={gig.status}"
     )
+
+    # Notify provider (fire-and-forget)
+    if not price_flagged:
+        await _notify_gig_created(gig, caller_id)
+
     return gig
 
 
@@ -267,6 +272,10 @@ async def complete_gig(
         f"Gig completed: {gig_id} | "
         f"{gig.price_tokens} LM transferred to {gig.provider_id}"
     )
+
+    # Notify both parties (fire-and-forget)
+    await _notify_gig_completed(gig)
+
     return gig
 
 
@@ -295,6 +304,10 @@ async def cancel_gig(
     await db.refresh(gig)
 
     logger.info(f"Gig cancelled: {gig_id} by {caller_id} | reason: {payload.reason}")
+
+    # Notify the other party
+    await _notify_gig_cancelled(gig, caller_id, payload.reason)
+
     return gig
 
 
@@ -309,36 +322,115 @@ async def _get_gig_or_404(gig_id: str, db: AsyncSession) -> Gig:
 
 
 async def _transfer_tokens(client_id: str, provider_id: str, amount: int, description: str):
-    """Call tokens service to transfer tokens from client to provider."""
     try:
-        # We call tokens service as the client (using internal header)
         resp = await http_client.post(
             f"{cfg.tokens_service_url}/pay-gig",
-            json={
-                "provider_id": provider_id,
-                "amount": amount,
-                "description": description,
-            },
+            json={"provider_id": provider_id, "amount": amount, "description": description},
             headers={"X-User-Id": client_id},
         )
         resp.raise_for_status()
         logger.info(f"Tokens transferred: {amount} LM from {client_id} to {provider_id}")
     except Exception as e:
         logger.error(f"Token transfer failed: {e}")
-        raise HTTPException(
-            status_code=502,
-            detail="Platba tokenmi zlyhala. Skúste znova.",
-        )
+        raise HTTPException(status_code=502, detail="Platba tokenmi zlyhala. Skúste znova.")
 
 
 async def _award_xp(provider_id: str, gig_id: str):
-    """Call users service to award XP to provider."""
     try:
         resp = await http_client.post(
             f"{cfg.users_service_url}/internal/gig-complete",
             json={"user_id": provider_id},
         )
         resp.raise_for_status()
+        return resp.json()
     except Exception as e:
-        # XP failure is non-critical — log but don't fail the completion
         logger.warning(f"XP award failed for {provider_id}: {e}")
+        return None
+
+
+async def _get_user_email(user_id: str) -> tuple[str, str]:
+    """Get user email and name from users service."""
+    try:
+        resp = await http_client.get(f"{cfg.users_service_url}/{user_id}")
+        if resp.status_code == 200:
+            data = resp.json()
+            return data.get("email", ""), data.get("name", "")
+    except Exception:
+        pass
+    return "", ""
+
+
+async def _notify_gig_created(gig: Gig, client_id: str):
+    try:
+        provider_email, provider_name = await _get_user_email(gig.provider_id)
+        _, client_name = await _get_user_email(client_id)
+        if provider_email:
+            await http_client.post(
+                f"{cfg.notifications_service_url}/gig-created",
+                json={
+                    "provider_email": provider_email,
+                    "provider_name": provider_name,
+                    "client_name": client_name,
+                    "gig_title": gig.title,
+                    "gig_price": gig.price_tokens,
+                    "gig_id": gig.id,
+                },
+            )
+    except Exception as e:
+        logger.warning(f"Gig created notification failed: {e}")
+
+
+async def _notify_gig_completed(gig: Gig):
+    try:
+        provider_email, provider_name = await _get_user_email(gig.provider_id)
+        client_email, client_name = await _get_user_email(gig.client_id)
+
+        # Get provider's new level
+        xp_resp = await http_client.get(f"{cfg.users_service_url}/{gig.provider_id}/xp")
+        new_level = xp_resp.json().get("level_name", "") if xp_resp.status_code == 200 else ""
+
+        if provider_email:
+            await http_client.post(
+                f"{cfg.notifications_service_url}/gig-completed-provider",
+                json={
+                    "provider_email": provider_email,
+                    "provider_name": provider_name,
+                    "gig_title": gig.title,
+                    "tokens_earned": gig.price_tokens,
+                    "new_level": new_level,
+                },
+            )
+        if client_email:
+            await http_client.post(
+                f"{cfg.notifications_service_url}/gig-completed-client",
+                json={
+                    "client_email": client_email,
+                    "client_name": client_name,
+                    "gig_title": gig.title,
+                    "tokens_spent": gig.price_tokens,
+                },
+            )
+    except Exception as e:
+        logger.warning(f"Gig completed notification failed: {e}")
+
+
+async def _notify_gig_cancelled(gig: Gig, cancelled_by_id: str, reason: str):
+    try:
+        # Notify the OTHER party
+        other_id = gig.provider_id if cancelled_by_id == gig.client_id else gig.client_id
+        other_email, other_name = await _get_user_email(other_id)
+        _, canceller_name = await _get_user_email(cancelled_by_id)
+
+        if other_email:
+            await http_client.post(
+                f"{cfg.notifications_service_url}/gig-cancelled",
+                json={
+                    "recipient_email": other_email,
+                    "recipient_name": other_name,
+                    "gig_title": gig.title,
+                    "cancelled_by": canceller_name or cancelled_by_id,
+                    "reason": reason,
+                },
+            )
+    except Exception as e:
+        logger.warning(f"Gig cancelled notification failed: {e}")

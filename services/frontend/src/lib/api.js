@@ -42,9 +42,10 @@ api.interceptors.response.use(
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 export const authApi = {
-  register: (data) => api.post('/auth/register', data),
-  login:    (data) => api.post('/auth/login', data),
-  refresh:  (data) => api.post('/auth/refresh', data),
+  register:      (data) => api.post('/auth/register', data),
+  login:         (data) => api.post('/auth/login', data),
+  refresh:       (data) => api.post('/auth/refresh', data),
+  deleteAccount: ()     => api.delete('/auth/me'),
 }
 
 // ─── Users / Profile ──────────────────────────────────────────────────────────

@@ -1,20 +1,37 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { usersApi } from '../lib/api'
 import { useStore } from '../store/useStore'
 import { Page, SectionLabel, LevelBadge, XpBar, Spinner } from '../components/ui'
 
 export default function ProfilePage() {
-  const { profile, setProfile, fetchProfile } = useStore()
+  const { profile, setProfile, fetchProfile, deleteAccount } = useStore()
+  const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
   const [xpData, setXpData] = useState(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [form, setForm] = useState({
     name: '', bio: '', city: '',
     service_description: '', tags: '',
     lat: '', lon: '',
   })
   const [saving, setSaving] = useState(false)
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true)
+    try {
+      await deleteAccount()
+      toast.success('Účet bol zmazaný')
+      navigate('/')
+    } catch (e) {
+      toast.error('Nepodarilo sa zmazať účet')
+      setDeleting(false)
+      setShowDeleteConfirm(false)
+    }
+  }
 
   useEffect(() => {
     fetchProfile()
@@ -252,6 +269,58 @@ export default function ProfilePage() {
             </motion.button>
           </motion.form>
         )}
+
+        {/* ── Danger zone ── */}
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="card p-6 mt-5"
+          style={{ borderColor: 'rgba(255,107,107,0.2)' }}
+        >
+          <h3 className="font-bold text-sm mb-1" style={{ color: '#ff6b6b' }}>⚠️ Nebezpečná zóna</h3>
+          <p className="text-muted text-xs mb-4">
+            Po zmazaní účtu stratíš prístup ku všetkým dátam a tokenom. Táto akcia je nevratná.
+          </p>
+
+          {!showDeleteConfirm ? (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              onClick={() => setShowDeleteConfirm(true)}
+              className="btn-ghost text-sm py-2 px-4"
+              style={{ borderColor: 'rgba(255,107,107,0.3)', color: '#ff6b6b' }}
+            >
+              🗑 Zmazať účet
+            </motion.button>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl p-4"
+              style={{ background: 'rgba(255,107,107,0.06)', border: '1px solid rgba(255,107,107,0.2)' }}
+            >
+              <p className="text-sm font-semibold mb-3" style={{ color: '#ff6b6b' }}>
+                Si si istá? Toto nejde vrátiť.
+              </p>
+              <div className="flex gap-2">
+                <motion.button
+                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  onClick={handleDeleteAccount}
+                  disabled={deleting}
+                  className="btn-primary text-sm py-2 px-4"
+                  style={{ background: '#ff6b6b' }}
+                >
+                  {deleting ? 'Mažem...' : 'Áno, zmazať účet'}
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="btn-ghost text-sm py-2 px-4"
+                >
+                  Zrušiť
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+        </motion.div>
       </div>
     </Page>
   )

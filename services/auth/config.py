@@ -15,6 +15,7 @@ class AuthConfig(BaseSettings):
     # Services
     tokens_service_url: str = "http://tokens:8004"
     users_service_url: str = "http://users:8002"
+    notifications_service_url: str = "http://notifications:8007"
 
     # Token economy
     welcome_tokens: int = 50
