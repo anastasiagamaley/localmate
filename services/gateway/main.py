@@ -146,7 +146,7 @@ async def proxy(service: str, path: str, request: Request):
         raise HTTPException(status_code=504, detail=f"Service '{service}' timed out")
 
     # Strip hop-by-hop headers before returning
-    excluded = {"transfer-encoding", "connection", "keep-alive", "upgrade"}
+    excluded = {"transfer-encoding", "connection", "keep-alive", "upgrade", "date", "server"}
     response_headers = {
         k: v for k, v in resp.headers.items()
         if k.lower() not in excluded
@@ -168,4 +168,16 @@ async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"success": False, "error": "Internal server error"},
+    )
+
+
+@app.options("/{service}/{path:path}")
+async def options_handler(service: str, path: str):
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-User-Id, X-Account-Type",
+        }
     )
