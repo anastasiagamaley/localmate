@@ -227,12 +227,12 @@ services:
     build:
       context: services/frontend
       args:
-        - VITE_API_URL=http://13.61.242.248:8000
+        - VITE_API_URL=https://localmate.work.gd
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
     environment:
-      VITE_API_URL: http://13.61.242.248:8000
+      VITE_API_URL: https://localmate.work.gd
       VITE_APP_NAME: LocalMate
     depends_on:
       - gateway
